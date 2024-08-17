@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: create ALB,TG,SG
+
+Resources:
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: ALB SG
+        GroupName: !Sub ${AWS::StackName}
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${AWS::StackName}
+        VpcId: !ImportValue CFnVPC
+
+  InternwtALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Sub ${AWS::StackName}
+      Scheme: internet-facing
+      SecurityGroups: 
+        - !Ref ALBSecurityGroup
+      Subnets: 
+        - !ImportValue PublicSubnet1
+        - !ImportValue PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      Type: application
+
+  ApplicationLoadBalancerListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Host: '#{host}'
+            Path: '/#{path}'
+            Port: 443
+            Protocol: HTTPS
+            Query: '#{query}'
+            StatusCode: HTTP_301
+      LoadBalancerArn: !Ref InternwtALB
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Matcher: 
+        HttpCode: 200
+      Name: !Sub ${AWS::StackName}
+      Port: 80
+      Protocol: HTTP
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      Targets:
+        - Id: !ImportValue MyEC2Instance1
+        - Id: !ImportValue MyEC2Instance2
+      TargetType: instance
+      VpcId: !ImportValue CFnVPC
+
+  ElasticIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: !ImportValue CFnVPC 
+
+Outputs:
+  ElasticIP:
+    Value: !Ref ElasticIP
+    Export:
+      Name: elasticip
+  InternwtALB:
+    Value: !Ref InternwtALB
+    Export:
+      Name: InternwtALB
+  TargetGroup:
+    Value: !Ref TargetGroup
+    Export:
+      Name: TargetGroup
+  InternwtALBDNSName:
+    Value: !GetAtt InternwtALB.DNSName
+    Export:
+      Name: albdnsname
+  ALBHostedZoneID:
+    Value: !GetAtt InternwtALB.CanonicalHostedZoneID
+    Export:
+      Name: albhostzoneid

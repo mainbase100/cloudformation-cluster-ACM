@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  record01:
+    Type: String
+    Default: test-omr.com
+    Description: domain name
+
+Resources:
+  ACM:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub "${record01}"
+      DomainValidationOptions:
+        - DomainName: !Sub "${record01}"
+          HostedZoneId: 
+            Fn::ImportValue:
+              HostedZoneID
+      SubjectAlternativeNames:
+        - !Sub "*.${record01}"
+      ValidationMethod: DNS
+
+  ALBListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ACM
+      DefaultActions:
+        - TargetGroupArn: !ImportValue TargetGroup
+          Type: forward
+      LoadBalancerArn: !ImportValue InternwtALB
+      

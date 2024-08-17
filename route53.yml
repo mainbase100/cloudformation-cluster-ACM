@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  HostedZoneName: 
+    Description: domain name.
+    Type: String
+    Default: test-omr.com
+
+Resources:
+  Route53HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Sub "${HostedZoneName}"
+  route53RSGroup:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref Route53HostedZone
+      RecordSets:
+        - Name: !Sub "${HostedZoneName}."
+          ResourceRecords:
+            - !ImportValue elasticip
+          Type: A
+          TTL: 300
+        - Name: !Sub "www.${HostedZoneName}."
+          AliasTarget:
+            HostedZoneId: 
+              Fn::ImportValue:
+                albhostzoneid
+            DNSName: 
+              Fn::ImportValue:
+                albdnsname
+          Type: A
+
+Outputs:
+  HostedZoneID:
+    Value: !Ref Route53HostedZone
+    Export:
+      Name: HostedZoneID

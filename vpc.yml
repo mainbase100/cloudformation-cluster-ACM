@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for VPC
+
+Resources:
+  CFnVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      InstanceTenancy: default
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: cfn-dev
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet2
+
+  CFnVPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: cfn-test
+
+  CFnVPCIGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref CFnVPCIGW
+      VpcId: !Ref CFnVPC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CFnVPC
+      Tags:
+        - Key: Name
+          Value: Public Route
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: CFnVPCIGW
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref CFnVPCIGW
+
+  PublicSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  MyEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: SecurityGroupForPublicServer
+      GroupDescription: Security Group for EC2 instance
+      SecurityGroupEgress: 
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      VpcId: !Ref CFnVPC
+
+  MyEC2Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-01ae6169b82b38e3b
+      InstanceType: t2.micro
+      KeyName: aws-test
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: 'true'
+          DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnet1  
+          GroupSet:
+            - !Ref MyEC2SecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        dnf update -y
+        dnf remove -y mariadb-libs
+        dnf install -y yum-utils
+        dnf -y localinstall https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm
+        dnf install -y mysql-community-client      
+      Tags:
+        - Key: Name
+          Value: MyEC2Instance1
+    DependsOn: MyEC2SecurityGroup
+
+  MyEC2Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-01ae6169b82b38e3b
+      InstanceType: t2.micro
+      KeyName: aws-test
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: 'true'
+          DeviceIndex: '0'
+          SubnetId: !Ref PublicSubnet2
+          GroupSet:
+            - !Ref MyEC2SecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash
+        dnf update -y
+        dnf remove -y mariadb-libs
+        dnf install -y yum-utils
+        dnf -y localinstall https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm
+        dnf install -y mysql-community-client
+      Tags:
+        - Key: Name
+          Value: MyEC2Instance2
+    DependsOn: MyEC2SecurityGroup   
+
+Outputs:
+  VpcId:
+    Value: !Ref CFnVPC
+    Export: 
+      Name: CFnVPC
+  PublicSubnetId1:
+    Value: !Ref PublicSubnet1 
+    Export:
+      Name: PublicSubnet1  
+  PublicSubnetId2:
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: PublicSubnet2 
+  MyEC2Instance1:
+    Value: !Ref MyEC2Instance1
+    Export:
+      Name: MyEC2Instance1 
+  MyEC2Instance2:
+    Value: !Ref MyEC2Instance2
+    Export:
+      Name: MyEC2Instance2 
+  MyEC2SecurityGroup:
+    Value: !Ref MyEC2SecurityGroup
+    Export:
+      Name: MyEC2SecurityGroup
